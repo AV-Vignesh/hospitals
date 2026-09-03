@@ -112,6 +112,7 @@
     q: "",
     state: "",
     city: "",
+    district: [],
     type: [],        // ownership
     spec: [],        // specialties
     accr: [],
@@ -126,6 +127,7 @@
     Q.q     = p.get("q") || "";
     Q.state = p.get("state") || "";
     Q.city  = p.get("city") || "";
+    Q.district = (p.get("dist") || "").split(",").filter(Boolean);
     Q.type  = (p.get("type") || "").split(",").filter(Boolean);
     Q.spec  = (p.get("spec") || "").split(",").filter(Boolean);
     Q.accr  = (p.get("accr") || "").split(",").filter(Boolean);
@@ -141,6 +143,7 @@
     if (Q.q) p.set("q", Q.q);
     if (Q.state) p.set("state", Q.state);
     if (Q.city) p.set("city", Q.city);
+    if (Q.district.length) p.set("dist", Q.district.join(","));
     if (Q.type.length) p.set("type", Q.type.join(","));
     if (Q.spec.length) p.set("spec", Q.spec.join(","));
     if (Q.accr.length) p.set("accr", Q.accr.join(","));
@@ -154,8 +157,8 @@
   }
 
   function activeFilterCount() {
-    return (Q.state ? 1 : 0) + (Q.city ? 1 : 0) + Q.type.length + Q.spec.length +
-           Q.accr.length + Q.ins.length + (Q.er ? 1 : 0);
+    return (Q.state ? 1 : 0) + (Q.city ? 1 : 0) + Q.district.length + Q.type.length +
+           Q.spec.length + Q.accr.length + Q.ins.length + (Q.er ? 1 : 0);
   }
 
   /* -------------------------------------------------------------- matching */
@@ -170,6 +173,8 @@
     if (skip !== "state" && Q.state && r.location.state !== Q.state) return false;
     if (skip !== "city"  && Q.city  && r.location.city  !== Q.city)  return false;
     if (skip !== "type"  && Q.type.length && Q.type.indexOf(r.type) === -1) return false;
+    if (skip !== "district" && Q.district.length &&
+        Q.district.indexOf(r.location.district) === -1) return false;
     if (skip !== "er"    && Q.er && !r.contact.emergency) return false;
 
     if (skip !== "spec" && Q.spec.length) {
@@ -267,6 +272,7 @@
     }
     if (Q.state) chip("state", Q.state, Q.state);
     if (Q.city) chip("city", Q.city, Q.city);
+    Q.district.forEach(function (v) { chip("district", v, v + " district"); });
     Q.type.forEach(function (v) { chip("type", v, OWN_LABEL[v]); });
     Q.spec.forEach(function (v) { chip("spec", v, v); });
     Q.accr.forEach(function (v) { chip("accr", v, v); });
@@ -312,12 +318,19 @@
   }
 
   function filtersHTML() {
+    // City first — it is what people actually reach for. The facet already
+    // respects an active state filter, so the list narrows on its own.
+    var cities = facet("city", function (r) { return r.location.city; });
     var states = facet("state", function (r) { return r.location.state; });
-    var cities = Q.state
-      ? facet("city", function (r) { return r.location.state === Q.state ? r.location.city : null; })
-      : [];
 
     var html = "";
+
+    html += '<div class="fgroup"><div class="fgroup__h">City or town</div>' +
+      '<select data-kind="city"><option value="">All cities</option>' +
+      cities.map(function (c) {
+        return '<option value="' + esc(c.v) + '"' + (Q.city === c.v ? " selected" : "") + ">" +
+          esc(c.v) + " (" + c.n + ")</option>";
+      }).join("") + "</select></div>";
 
     html += '<div class="fgroup"><div class="fgroup__h">State or union territory</div>' +
       '<select data-kind="state"><option value="">All of India</option>' +
@@ -326,14 +339,9 @@
           esc(s.v) + " (" + s.n + ")</option>";
       }).join("") + "</select></div>";
 
-    if (cities.length) {
-      html += '<div class="fgroup"><div class="fgroup__h">City</div>' +
-        '<select data-kind="city"><option value="">All cities</option>' +
-        cities.map(function (c) {
-          return '<option value="' + esc(c.v) + '"' + (Q.city === c.v ? " selected" : "") + ">" +
-            esc(c.v) + " (" + c.n + ")</option>";
-        }).join("") + "</select></div>";
-    }
+    html += checkGroup("District", "district", facet("district", function (r) {
+      return r.location.district;
+    }), Q.district, 6);
 
     html += checkGroup("Ownership", "type",
       facet("type", function (r) { return r.type; }), Q.type, 6, OWN_LABEL);
@@ -532,7 +540,7 @@
     var kind = el.getAttribute("data-kind");
     if (!kind) return;
 
-    if (kind === "state") { Q.state = el.value; Q.city = ""; }
+    if (kind === "state") { Q.state = el.value; Q.city = ""; Q.district = []; }
     else if (kind === "city") { Q.city = el.value; }
     else if (kind === "er") { Q.er = el.checked; }
     else {
@@ -557,7 +565,7 @@
 
   function resetAll() {
     Q.q = ""; Q.state = ""; Q.city = "";
-    Q.type = []; Q.spec = []; Q.accr = []; Q.ins = []; Q.er = false;
+    Q.district = []; Q.type = []; Q.spec = []; Q.accr = []; Q.ins = []; Q.er = false;
     $("#q").value = "";
     $("#qClear").hidden = true;
     writeHash("");
@@ -593,7 +601,7 @@
       var c = e.target.closest("[data-kind]");
       if (!c) return;
       var kind = c.getAttribute("data-kind"), val = c.getAttribute("data-val");
-      if (kind === "state") { Q.state = ""; Q.city = ""; }
+      if (kind === "state") { Q.state = ""; Q.city = ""; Q.district = []; }
       else if (kind === "city") Q.city = "";
       else if (kind === "er") Q.er = false;
       else if (Array.isArray(Q[kind])) Q[kind] = Q[kind].filter(function (v) { return v !== val; });
