@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system" data-accent="clinical" data-scale="m" data-density="comfortable" data-view="rows">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hospital Directory — India</title>
+<meta name="description" content="A searchable directory of hospitals across India: departments, doctors, insurance panels, ownership and history." />
+<meta name="color-scheme" content="light dark" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+
+<a class="skip" href="#results">Skip to results</a>
+
+<header class="masthead">
+  <div class="masthead__in">
+    <a class="wordmark" href="#" aria-label="Hospital Directory India — home">
+      <span class="wordmark__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </span>
+      <span class="wordmark__text">Hospital Directory<span class="wordmark__sub">India</span></span>
+    </a>
+
+    <div class="finder">
+      <svg class="finder__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" stroke-linecap="round" />
+      </svg>
+      <input id="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Hospital, city, district or department" aria-label="Search hospitals" />
+      <button id="qClear" class="finder__clear" type="button" aria-label="Clear search" hidden>&times;</button>
+    </div>
+
+    <div class="masthead__acts">
+      <button id="openFilters" class="btn btn--ghost btn--filters" type="button" aria-haspopup="dialog">
+        Filters <span id="filterCount" class="tally" hidden>0</span>
+      </button>
+      <button id="openPrefs" class="btn btn--ghost btn--icon" type="button" aria-haspopup="dialog" aria-label="Display settings">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">
+          <path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke-linecap="round"/>
+          <circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div id="dataNotice" class="notice" role="status">
+  <strong>Sample data.</strong> This build ships a small seed set for demonstration. Fields marked
+  <em>unverified</em> have not been checked against an official source. Read <code>README.md</code> before publishing.
+  <button class="notice__x" type="button" aria-label="Dismiss notice">&times;</button>
+</div>
+
+<main class="shell">
+
+  <!-- ============ LIST VIEW ============ -->
+  <div id="listView">
+    <aside class="rail" id="railDesktop">
+      <div class="rail__in" id="filterHost"><!-- filter groups injected --></div>
+    </aside>
+
+    <section class="results" id="results" aria-live="polite">
+      <div class="results__bar">
+        <p class="count" id="count">Loading directory…</p>
+        <label class="sort">
+          <span>Sort</span>
+          <select id="sort">
+            <option value="name">Name, A–Z</option>
+            <option value="beds">Bed strength, high to low</option>
+            <option value="city">City, A–Z</option>
+            <option value="founded">Oldest first</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="chips" class="chips" hidden></div>
+      <ol id="list" class="list"></ol>
+      <div id="sentinel" class="sentinel" aria-hidden="true"></div>
+      <div id="empty" class="blank" hidden>
+        <h2>No hospital matches this search</h2>
+        <p>Try a district name, a department such as cardiology, or clear a filter.</p>
+        <button class="btn" type="button" id="resetAll">Clear all filters</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ DETAIL VIEW ============ -->
+  <article id="detailView" class="detail" hidden></article>
+
+</main>
+
+<footer class="foot">
+  <p>Static, open-source directory. No accounts, no tracking, no server.
+     Data quality is the responsibility of whoever publishes this repository.</p>
+</footer>
+
+<!-- ============ FILTER SHEET (mobile) ============ -->
+<dialog id="filterSheet" class="sheet">
+  <form method="dialog" class="sheet__head">
+    <h2>Filters</h2>
+    <button class="btn btn--ghost btn--icon" value="close" aria-label="Close filters">&times;</button>
+  </form>
+  <div class="sheet__body" id="filterHostMobile"></div>
+  <div class="sheet__foot">
+    <button class="btn btn--ghost" type="button" id="sheetReset">Clear all</button>
+    <button class="btn btn--solid" type="button" id="sheetApply">Show results</button>
+  </div>
+</dialog>
+
+<!-- ============ PREFERENCES ============ -->
+<dialog id="prefsSheet" class="sheet sheet--right">
+  <form method="dialog" class="sheet__head">
+    <h2>Display settings</h2>
+    <button class="btn btn--ghost btn--icon" value="close" aria-label="Close settings">&times;</button>
+  </form>
+  <div class="sheet__body prefs">
+
+    <fieldset class="pref">
+      <legend>Appearance</legend>
+      <div class="seg" role="radiogroup" aria-label="Appearance" data-pref="theme">
+        <button type="button" role="radio" data-val="light">Light</button>
+        <button type="button" role="radio" data-val="dark">Dark</button>
+        <button type="button" role="radio" data-val="system">Match device</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="pref">
+      <legend>Accent</legend>
+      <div class="swatches" role="radiogroup" aria-label="Accent colour" data-pref="accent">
+        <button type="button" role="radio" data-val="clinical" style="--s:#0E6E5C" aria-label="Clinical green"></button>
+        <button type="button" role="radio" data-val="indigo"   style="--s:#3B4E9B" aria-label="Indigo"></button>
+        <button type="button" role="radio" data-val="rust"     style="--s:#A6462B" aria-label="Rust"></button>
+        <button type="button" role="radio" data-val="plum"     style="--s:#77376B" aria-label="Plum"></button>
+        <button type="button" role="radio" data-val="ochre"    style="--s:#8A6410" aria-label="Ochre"></button>
+        <button type="button" role="radio" data-val="slate"    style="--s:#40515C" aria-label="Slate"></button>
+      </div>
+    </fieldset>
+
+    <fieldset class="pref">
+      <legend>Text size</legend>
+      <div class="seg" role="radiogroup" aria-label="Text size" data-pref="scale">
+        <button type="button" role="radio" data-val="s">Small</button>
+        <button type="button" role="radio" data-val="m">Default</button>
+        <button type="button" role="radio" data-val="l">Large</button>
+        <button type="button" role="radio" data-val="xl">Largest</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="pref">
+      <legend>Row spacing</legend>
+      <div class="seg" role="radiogroup" aria-label="Row spacing" data-pref="density">
+        <button type="button" role="radio" data-val="comfortable">Comfortable</button>
+        <button type="button" role="radio" data-val="compact">Compact</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="pref">
+      <legend>Result layout</legend>
+      <div class="seg" role="radiogroup" aria-label="Result layout" data-pref="view">
+        <button type="button" role="radio" data-val="rows">List</button>
+        <button type="button" role="radio" data-val="cards">Cards</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="pref">
+      <legend>Motion</legend>
+      <div class="seg" role="radiogroup" aria-label="Motion" data-pref="motion">
+        <button type="button" role="radio" data-val="full">On</button>
+        <button type="button" role="radio" data-val="reduced">Reduced</button>
+      </div>
+      <p class="pref__note">Reduced also applies automatically if your device asks for less motion.</p>
+    </fieldset>
+
+    <div class="pref pref--flat">
+      <button class="btn btn--ghost" type="button" id="prefsReset">Reset to defaults</button>
+      <p class="pref__note" id="storeNote"></p>
+    </div>
+  </div>
+</dialog>
+
+<script src="data/hospitals.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-accent="clinical" data-scale="m" data-density="comfortable">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CSV import — Hospital Directory India</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../assets/styles.css" />
+<style>
+  .wrap { max-width: 880px; margin: 0 auto; padding: 34px 20px 80px; }
+  .wrap h1 { font-family: var(--f-name); font-size: 2rem; letter-spacing: -0.02em; margin-bottom: 8px; }
+  .lede { color: var(--ink-soft); max-width: 64ch; margin-bottom: 28px; }
+  .step { margin-bottom: 30px; }
+  .map { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: var(--r-md); overflow: hidden; }
+  .map__r { background: var(--ward); padding: 10px 14px; display: grid; grid-template-columns: 210px minmax(0,1fr); gap: 12px; align-items: center; font-size: 0.9rem; }
+  .map__r code { color: var(--ink-soft); font-size: 0.86rem; }
+  .map__r select { width: 100%; padding: 7px 9px; background: var(--ward); border: 1px solid var(--rule); border-radius: var(--r-sm); }
+  textarea { width: 100%; min-height: 220px; padding: 13px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.78rem;
+             background: var(--ward); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--r-md); }
+  .row { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 14px; }
+  input[type=file] { font-size: 0.9rem; }
+  @media (max-width: 620px) { .map__r { grid-template-columns: minmax(0,1fr); gap: 5px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p><a class="back" href="../index.html" style="text-decoration:none">&larr; Back to the directory</a></p>
+  <h1>Turn a CSV into hospitals.js</h1>
+  <p class="lede">Everything happens in this browser tab — nothing is uploaded. Load an open-data CSV
+     (for example the National Hospital Directory), map its columns onto the schema, and download a
+     ready <code>hospitals.js</code>. Unmapped fields are left empty rather than guessed.</p>
+
+  <section class="step">
+    <h2 class="sec__h">1 — Choose a CSV file</h2>
+    <input type="file" id="file" accept=".csv,text/csv" />
+    <p class="pref__note" id="fileNote">Expects a header row. Quoted fields and commas inside quotes are handled.</p>
+  </section>
+
+  <section class="step" id="mapStep" hidden>
+    <h2 class="sec__h">2 — Map columns</h2>
+    <div class="map" id="map"></div>
+    <div class="row">
+      <label class="opt" style="gap:7px"><input type="checkbox" id="splitSpec" checked> Split departments on commas / semicolons</label>
+    </div>
+    <div class="row">
+      <button class="btn btn--solid" id="build" type="button">Build hospitals.js</button>
+    </div>
+  </section>
+
+  <section class="step" id="outStep" hidden>
+    <h2 class="sec__h">3 — Result</h2>
+    <p class="pref__note" id="stat" style="margin-bottom:10px"></p>
+    <textarea id="out" spellcheck="false" readonly></textarea>
+    <div class="row">
+      <button class="btn btn--solid" id="dl" type="button">Download hospitals.js</button>
+      <button class="btn" id="copy" type="button">Copy to clipboard</button>
+    </div>
+    <p class="pref__note">Replace <code>data/hospitals.js</code> with this file. Every record is written as
+       <code>dataStatus: "seed-unverified"</code> — change that to <code>"verified"</code> only for rows you have actually checked.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  var FIELDS = [
+    ["name",              "Hospital name (required)"],
+    ["aka",               "Short or common name"],
+    ["type",              "Ownership: government / private / trust"],
+    ["beds",              "Bed count (number)"],
+    ["specialties",       "Departments / specialities"],
+    ["location.address",  "Street address"],
+    ["location.city",     "City / town"],
+    ["location.district", "District"],
+    ["location.state",    "State or UT"],
+    ["location.pincode",  "PIN code"],
+    ["location.lat",      "Latitude"],
+    ["location.lng",      "Longitude"],
+    ["contact.phone",     "Telephone"],
+    ["contact.emergency", "Emergency number"],
+    ["contact.email",     "Email"],
+    ["contact.website",   "Website"],
+    ["ownership.owner",   "Owning body"],
+    ["ownership.founded", "Year established"]
+  ];
+
+  var rows = [], head = [];
+
+  function parseCSV(text) {
+    var out = [], row = [], val = "", q = false, i = 0;
+    text = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+    for (; i < text.length; i++) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { val += '"'; i++; } else q = false; }
+        else val += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(val); val = ""; }
+      else if (c === "\n") { row.push(val); out.push(row); row = []; val = ""; }
+      else val += c;
+    }
+    if (val !== "" || row.length) { row.push(val); out.push(row); }
+    return out.filter(function (r) { return r.some(function (c) { return String(c).trim() !== ""; }); });
+  }
+
+  function slug(s, i) {
+    var base = String(s || "hospital").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+    return (base || "hospital") + "-" + i;
+  }
+
+  function guess(name) {
+    var n = name.toLowerCase();
+    if (/(^|[^a-z])name/.test(n) && !/district|state|city/.test(n)) return "name";
+    if (/city|town/.test(n)) return "location.city";
+    if (/district/.test(n)) return "location.district";
+    if (/state|^ut$/.test(n)) return "location.state";
+    if (/pin|zip|postal/.test(n)) return "location.pincode";
+    if (/lat/.test(n)) return "location.lat";
+    if (/long|lng/.test(n)) return "location.lng";
+    if (/address|location/.test(n)) return "location.address";
+    if (/tele|phone|contact|mobile/.test(n)) return "contact.phone";
+    if (/mail/.test(n)) return "contact.email";
+    if (/web|url|site/.test(n)) return "contact.website";
+    if (/special|department|service/.test(n)) return "specialties";
+    if (/bed/.test(n)) return "beds";
+    if (/categ|type|owner|sector/.test(n)) return "type";
+    return "";
+  }
+
+  function drawMap() {
+    document.getElementById("map").innerHTML = FIELDS.map(function (f) {
+      var opts = ['<option value="">— not in this file —</option>'].concat(head.map(function (h, i) {
+        var sel = guess(h) === f[0] ? " selected" : "";
+        return '<option value="' + i + '"' + sel + ">" + h.replace(/[<>&]/g, "") + "</option>";
+      })).join("");
+      return '<div class="map__r"><div><code>' + f[0] + "</code><br><span style=\"font-size:.8rem;color:var(--ink-faint)\">" +
+        f[1] + '</span></div><select data-f="' + f[0] + '">' + opts + "</select></div>";
+    }).join("");
+  }
+
+  function setDeep(obj, path, val) {
+    var parts = path.split("."), o = obj;
+    for (var i = 0; i < parts.length - 1; i++) { o[parts[i]] = o[parts[i]] || {}; o = o[parts[i]]; }
+    o[parts[parts.length - 1]] = val;
+  }
+
+  function normType(v) {
+    var s = String(v || "").toLowerCase();
+    if (/gov|public|govt|district hospital|phc|chc|municipal|esi/.test(s)) return "government";
+    if (/trust|charit|society|mission|ngo/.test(s)) return "trust";
+    return "private";
+  }
+
+  document.getElementById("file").addEventListener("change", function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      var all = parseCSV(fr.result);
+      head = all[0] || [];
+      rows = all.slice(1);
+      document.getElementById("fileNote").textContent =
+        rows.length.toLocaleString("en-IN") + " data rows, " + head.length + " columns.";
+      drawMap();
+      document.getElementById("mapStep").hidden = false;
+    };
+    fr.readAsText(f);
+  });
+
+  document.getElementById("build").addEventListener("click", function () {
+    var map = {};
+    Array.prototype.forEach.call(document.querySelectorAll("[data-f]"), function (s) {
+      if (s.value !== "") map[s.getAttribute("data-f")] = parseInt(s.value, 10);
+    });
+    if (map.name === undefined) { alert("Map a column to 'name' first — a record without a name is useless."); return; }
+
+    var split = document.getElementById("splitSpec").checked;
+    var recs = rows.map(function (r, i) {
+      var rec = { id: "", name: "", type: "private", specialties: [], services: [], accreditation: [],
+                  ownership: {}, location: {}, contact: {}, insurance: { schemes: [], cashless: [], tpa: [] },
+                  keyDoctors: [], sources: [], dataStatus: "seed-unverified" };
+      Object.keys(map).forEach(function (field) {
+        var raw = String(r[map[field]] == null ? "" : r[map[field]]).trim();
+        if (!raw) return;
+        if (field === "specialties") {
+          rec.specialties = split
+            ? raw.split(/[;,|]/).map(function (s) { return s.trim(); }).filter(Boolean)
+            : [raw];
+        } else if (field === "beds" || field === "ownership.founded") {
+          var n = parseInt(raw.replace(/[^0-9]/g, ""), 10);
+          if (!isNaN(n)) setDeep(rec, field, n);
+        } else if (field === "location.lat" || field === "location.lng") {
+          var fl = parseFloat(raw);
+          if (!isNaN(fl)) setDeep(rec, field, fl);
+        } else if (field === "type") {
+          rec.type = normType(raw);
+        } else {
+          setDeep(rec, field, raw);
+        }
+      });
+      rec.id = slug(rec.name, i + 1);
+      return rec;
+    }).filter(function (r) { return r.name; });
+
+    var js = "/* Generated from CSV on " + new Date().toISOString().slice(0, 10) +
+      ".\n   " + recs.length + " records. All flagged seed-unverified — verify before publishing. */\n\n" +
+      "window.HOSPITALS = " + JSON.stringify(recs, null, 1) + ";\n";
+
+    document.getElementById("out").value = js;
+    document.getElementById("stat").textContent =
+      recs.length.toLocaleString("en-IN") + " records built · " + Math.round(js.length / 1024) + " KB";
+    document.getElementById("outStep").hidden = false;
+    document.getElementById("outStep").scrollIntoView({ behavior: "smooth" });
+  });
+
+  document.getElementById("dl").addEventListener("click", function () {
+    var blob = new Blob([document.getElementById("out").value], { type: "text/javascript" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "hospitals.js";
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var t = document.getElementById("out");
+    t.select();
+    try { document.execCommand("copy"); this.textContent = "Copied"; } catch (e) { this.textContent = "Copy failed"; }
+    var b = this;
+    setTimeout(function () { b.textContent = "Copy to clipboard"; }, 1600);
+  });
+})();
+</script>
+</body>
+</html>
